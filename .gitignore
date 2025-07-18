@@ -62,8 +62,7 @@ braker.cds.fa
 braker.gff3
 braker.gtf
 test.gff3
-KaleLate.genome.softmask.fa
-KaleLate.genome.softmask.fa.fai
+*genome.softmask.fa*
 
 # Temporary files
 2025-07-18-*.txt
