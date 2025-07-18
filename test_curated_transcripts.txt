@@ -1,0 +1,5 @@
+# Gene_ID	Selected_Transcript_ID	Curation_Reason	Quality_Override
+g1	g1.t2	manual_selection_best_coverage	validated
+g2	g2.t1	only_complete_transcript	validated
+g5	REMOVE	all_transcripts_invalid	removed
+g10	g10.t1	manual_inspection_preferred	low_quality_accepted
