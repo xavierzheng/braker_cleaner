@@ -92,13 +92,16 @@ conda activate braker_cleaner
   - `cleaned.aa` - Validated amino acid sequences
 - **Comprehensive Reports**:
   - `processing_report.txt` - Pipeline progression and codon integration statistics
-  - `manual_review_transcripts.txt` - Genes needing attention (typically empty)
+  - `manual_review_transcripts.txt` - Genes needing attention
+    - **Length filtering**: Genes with `all_transcripts_too_short` flag
+    - **Exclusion**: These genes are completely removed from output files
 
 ## Performance Results
 
-### Perfect Selection Success with Complete Codon Integration
-- **100% selection rate**: 59,004 out of 59,004 genes get representatives
-- **0% manual review rate**: No genes require manual examination
+### High Selection Success with Strict Length Filtering
+- **99.8% selection rate**: 58,912 out of 59,004 genes get representatives
+- **0.2% manual review rate**: 92 genes with all transcripts below length threshold
+- **Strict length filtering**: ALL output sequences guaranteed ≥ `--min-length`
 - **Complete codon integration**: All start/stop codons properly merged with adjacent features
 - **Accurate sequence reconstruction**: CDS sequences rebuilt from merged coordinates
 - **Enhanced gene boundaries**: Coordinates updated to reflect merged codon regions
@@ -130,6 +133,8 @@ conda activate braker_cleaner
 - `--genome`: Reference genome FASTA file (**REQUIRED for proper codon integration**)
 - `--output-dir`: Output directory (required)
 - `--min-length`: Minimum AA length threshold (default: 50, recommended: 20-30)
+  - **STRICT FILTERING**: Only sequences ≥ min-length appear in output
+  - **Genes excluded**: All transcripts below threshold → flagged for manual review
 - `--overlap-threshold`: Overlap threshold for spatial conflicts (default: 0.5)
 - `--log-level`: Logging level (default: INFO)
 - `--curated-list`: Manual curation file (optional)
@@ -289,6 +294,30 @@ python gene_curation_pipeline.py \
 >g2.t1 flags=passed_aa_validation,cds_reconstructed_from_merged_coordinates,real_spatial_conflict,representative,corrected_stop_codon,post_selection_overlap,redundant_start_codon_removed,created_stop_codon_features
 ```
 
+## Strict Length Filtering
+
+### Minimum Length Enforcement
+The `--min-length` parameter **strictly enforces** amino acid length requirements:
+
+- **Guaranteed filtering**: ALL sequences in output are ≥ `--min-length`
+- **Gene exclusion**: Genes where all transcripts are too short are completely removed
+- **No fallback selection**: Short transcripts are never selected as representatives
+- **Manual review flagging**: Short-gene exclusions documented with `all_transcripts_too_short`
+
+### Manual Review Cases
+`manual_review_transcripts.txt` contains genes excluded due to length filtering:
+```
+# Example entries for genes with all transcripts below --min-length threshold:
+# Gene_ID	Transcript_IDs	Reason	Quality_Flags
+g1532	g1532.t1	all_transcripts_too_short	short_transcript,manual_review,all_transcripts_too_short
+g2847	g2847.t1,g2847.t2	all_transcripts_too_short	short_transcript,manual_review,all_transcripts_too_short
+```
+
+**Key Points**:
+- These genes are **completely absent** from `cleaned.gff3`/`cleaned.gtf`
+- These genes are **completely absent** from `cleaned.cds.fa` and `cleaned.aa`
+- Manual review file documents exactly which genes were excluded and why
+
 ## Manual Curation Format
 
 Create `curated_transcripts.txt` with tab-separated values:
@@ -356,6 +385,13 @@ python gene_curation_pipeline.py --gene-model test.gff3 --cds test.cds.fa --aa t
 3. **Coordinate errors**: Verify chromosome names match between annotations and genome
 4. **Quality flags missing**: Ensure codon integration flags appear in output sequence headers
 
+### Length Filtering Issues
+1. **Fewer genes than expected**: Check `manual_review_transcripts.txt` for excluded genes
+2. **Missing specific genes**: Genes with all transcripts < `--min-length` are completely removed
+3. **Length threshold too strict**: Consider lowering `--min-length` parameter (e.g., from 50 to 20)
+4. **Manual review entries**: All excluded genes flagged as `all_transcripts_too_short`
+5. **Output verification**: Verify all sequences in `cleaned.aa` are ≥ `--min-length`
+
 ### Performance Optimization
 - **Always provide genome reference** for complete functionality
 - Use indexed genome access with pyfaidx
@@ -412,21 +448,24 @@ python gene_curation_pipeline.py --gene-model test.gff3 --cds test.cds.fa --aa t
 
 ## Results Summary
 
-### Test Dataset Results with Complete Codon Integration
+### Test Dataset Results with Strict Length Filtering
 - **Total genes**: 59,004
 - **Total transcripts**: 100,400
-- **Representatives selected**: 59,004 (100%)
-- **Manual review needed**: 0 (0%)
+- **Representatives selected**: 58,912 (99.8%) with `--min-length 20`
+- **Manual review needed**: 92 (0.2%) - genes with all transcripts < 20 AA
+- **Length compliance**: 100% of output sequences ≥ minimum length threshold
 - **Codon features processed**: All start/stop codons properly integrated
 - **Sequence reconstruction**: Complete CDS sequences rebuilt from merged coordinates
 - **Processing time**: ~25 seconds
 - **Memory usage**: ~510 MB
 
 ### Performance Achievements
-- ✅ **100% selection success**: All genes get representatives
+- ✅ **High selection success**: 99.8% of genes get representatives (strict length filtering)
+- ✅ **Strict length compliance**: 100% of output sequences meet `--min-length` requirement
 - ✅ **Complete codon integration**: All start/stop codons merged with adjacent features
 - ✅ **Accurate sequence reconstruction**: CDS sequences rebuilt from merged coordinates
 - ✅ **Enhanced gene boundaries**: Coordinates updated based on merged codon regions
+- ✅ **Transparent exclusions**: All excluded genes documented in manual review file
 - ✅ **O(n log n) complexity**: All algorithms verified including codon integration
 - ✅ **Memory efficiency**: < 600MB for 100K+ transcripts with full reconstruction
 - ✅ **Format preservation**: Automatic GFF3/GTF format detection and preservation

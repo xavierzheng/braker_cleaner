@@ -623,14 +623,23 @@ class TranscriptSelector:
             # Step 1: Remove low-quality transcripts (sequence-based only)
             high_quality_transcripts = self._filter_low_quality_sequence_based(gene.transcripts)
             
-            # If no high-quality transcripts, but gene has transcripts, select the longest one
+            # If no high-quality transcripts, check if longest transcript meets minimum threshold
             if not high_quality_transcripts:
                 if gene.transcripts:
-                    # Select the longest transcript even if it's short
-                    representative = max(gene.transcripts, key=lambda t: len(t.aa_sequence))
-                    gene.representative = representative
-                    representative.quality_flags.add("representative")
-                    selected_count += 1
+                    # Find the longest transcript
+                    longest_transcript = max(gene.transcripts, key=lambda t: len(t.aa_sequence))
+                    
+                    # Only select if it meets the --min-length requirement
+                    if len(longest_transcript.aa_sequence) >= self.min_length:
+                        gene.representative = longest_transcript
+                        longest_transcript.quality_flags.add("representative")
+                        selected_count += 1
+                    else:
+                        # All transcripts are too short - mark for manual review
+                        for transcript in gene.transcripts:
+                            transcript.quality_flags.add("manual_review")
+                            transcript.quality_flags.add("all_transcripts_too_short")
+                        manual_review_count += 1
                 continue
             
             # Step 2: Group by AA sequence MD5 hash
