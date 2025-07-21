@@ -384,17 +384,15 @@ class AnnotationCurator:
         return False
     
     def _create_codon_features(self, transcript: Transcript, codon: Codon) -> None:
-        """Create new exon and CDS features for codon."""
-        # Create new exon
+        """Create new exon and CDS features for codon, then merge with adjacent features if possible."""
+        # Step 1: Create new exon and CDS features for codon
         new_exon = Exon(
             start=codon.start,
             end=codon.end,
             strand=codon.strand,
             id=f"{transcript.id}.{codon.codon_type}_exon"
         )
-        transcript.exons.append(new_exon)
         
-        # Create new CDS
         new_cds = CDS(
             start=codon.start,
             end=codon.end,
@@ -402,7 +400,47 @@ class AnnotationCurator:
             phase=0,
             id=f"{transcript.id}.{codon.codon_type}_cds"
         )
-        transcript.cds_regions.append(new_cds)
+        
+        # Step 2: Check if new features can be merged with existing adjacent features
+        merged_exon = self._merge_with_adjacent_exon(transcript, new_exon)
+        merged_cds = self._merge_with_adjacent_cds(transcript, new_cds)
+        
+        # Step 3: Add features (merged or new) to transcript
+        if not merged_exon:
+            transcript.exons.append(new_exon)
+        if not merged_cds:
+            transcript.cds_regions.append(new_cds)
+        
+        # Step 4: Update transcript boundaries to cover new codon
+        self._update_transcript_boundaries(transcript, codon)
+    
+    def _merge_with_adjacent_exon(self, transcript: Transcript, new_exon: Exon) -> bool:
+        """Check if new exon can be merged with adjacent existing exons."""
+        for exon in transcript.exons:
+            # Check if new exon is adjacent to existing exon (allowing 1bp gap or overlap)
+            if (abs(exon.end - new_exon.start) <= 1) or (abs(new_exon.end - exon.start) <= 1):
+                # Merge by extending the existing exon boundaries
+                exon.start = min(exon.start, new_exon.start)
+                exon.end = max(exon.end, new_exon.end)
+                return True  # Successfully merged
+        return False  # No adjacent exon found
+    
+    def _merge_with_adjacent_cds(self, transcript: Transcript, new_cds: CDS) -> bool:
+        """Check if new CDS can be merged with adjacent existing CDS."""
+        for cds in transcript.cds_regions:
+            # Check if new CDS is adjacent to existing CDS (allowing 1bp gap or overlap)
+            if (abs(cds.end - new_cds.start) <= 1) or (abs(new_cds.end - cds.start) <= 1):
+                # Merge by extending the existing CDS boundaries
+                cds.start = min(cds.start, new_cds.start)
+                cds.end = max(cds.end, new_cds.end)
+                # Keep the phase of the original CDS (important for translation)
+                return True  # Successfully merged
+        return False  # No adjacent CDS found
+    
+    def _update_transcript_boundaries(self, transcript: Transcript, codon: Codon) -> None:
+        """Update transcript start/end coordinates to include new codon."""
+        transcript.start = min(transcript.start, codon.start)
+        transcript.end = max(transcript.end, codon.end)
     
     def _detect_overlaps(self, genes: Dict[str, Gene]) -> None:
         """Detect overlapping transcripts using IntervalTree O(n log n)."""
@@ -446,6 +484,10 @@ class SequenceValidator:
                 # Validate CDS sequence
                 if self._validate_cds_sequence(transcript):
                     corrected_count += 1
+                
+                # Reconstruct CDS sequence from merged coordinates if genome is available
+                if self.sequence_handler.genome_index:
+                    self._reconstruct_cds_sequence(transcript)
                 
                 # Validate AA sequence
                 self._validate_aa_sequence(transcript)
@@ -504,18 +546,63 @@ class SequenceValidator:
         if not transcript.start_codon or not self.sequence_handler.genome_index:
             return False
         
-        # This is a simplified implementation - would need chromosome info
-        # For now, just mark as needing correction
-        return True
+        # Extract start codon sequence from genome
+        codon_seq = self.sequence_handler.get_genome_sequence(
+            transcript.chrom, 
+            transcript.start_codon.start, 
+            transcript.start_codon.end,
+            transcript.strand
+        )
+        
+        if codon_seq and codon_seq.upper() in ['ATG', 'GTG', 'TTG']:
+            # For start codon, prepend to CDS sequence
+            transcript.cds_sequence = codon_seq + transcript.cds_sequence
+            return True
+        return False
     
     def _add_stop_codon_from_genome(self, transcript: Transcript) -> bool:
         """Add stop codon from genome sequence."""
         if not transcript.stop_codon or not self.sequence_handler.genome_index:
             return False
         
-        # This is a simplified implementation - would need chromosome info
-        # For now, just mark as needing correction
-        return True
+        # Extract stop codon sequence from genome
+        codon_seq = self.sequence_handler.get_genome_sequence(
+            transcript.chrom, 
+            transcript.stop_codon.start, 
+            transcript.stop_codon.end,
+            transcript.strand
+        )
+        
+        if codon_seq and codon_seq.upper() in ['TAA', 'TAG', 'TGA']:
+            # For stop codon, append to CDS sequence
+            transcript.cds_sequence += codon_seq
+            return True
+        return False
+    
+    def _reconstruct_cds_sequence(self, transcript: Transcript) -> None:
+        """Reconstruct complete CDS sequence from merged coordinates."""
+        if not transcript.cds_regions or not self.sequence_handler.genome_index:
+            return
+        
+        # Sort CDS regions by coordinate (important for proper sequence order)
+        sorted_cds = sorted(transcript.cds_regions, key=lambda x: x.start if transcript.strand == '+' else -x.start)
+        
+        # Extract sequence from each CDS region
+        reconstructed_sequence = ""
+        for cds in sorted_cds:
+            cds_seq = self.sequence_handler.get_genome_sequence(
+                transcript.chrom, 
+                cds.start, 
+                cds.end,
+                transcript.strand
+            )
+            if cds_seq:
+                reconstructed_sequence += cds_seq
+        
+        # Update transcript with reconstructed sequence
+        if reconstructed_sequence:
+            transcript.cds_sequence = reconstructed_sequence
+            transcript.quality_flags.add("cds_reconstructed_from_merged_coordinates")
 
 
 class TranscriptSelector:
@@ -782,17 +869,27 @@ class OutputGenerator:
                     transcript = gene.representative
                     
                     # Calculate updated gene boundaries based on representative transcript
-                    gene_start = transcript.start
-                    gene_end = transcript.end
+                    # Include all exons to ensure proper gene boundary calculation
+                    if transcript.exons:
+                        exon_starts = [e.start for e in transcript.exons]
+                        exon_ends = [e.end for e in transcript.exons]
+                        gene_start = min(exon_starts)
+                        gene_end = max(exon_ends)
+                    else:
+                        gene_start = transcript.start
+                        gene_end = transcript.end
                     
-                    # Check if gene boundaries have changed (shrunk)
+                    # Check if gene boundaries have changed (shrunk or expanded)
                     original_gene_spans = [t.start for t in gene.transcripts] + [t.end for t in gene.transcripts]
                     original_start = min(original_gene_spans)
                     original_end = max(original_gene_spans)
                     
-                    if gene_start > original_start or gene_end < original_end:
+                    if gene_start != original_start or gene_end != original_end:
                         transcript.quality_flags.add("gene_boundaries_updated")
-                        transcript.quality_flags.add("gene_shrunk")
+                        if gene_start > original_start or gene_end < original_end:
+                            transcript.quality_flags.add("gene_shrunk")
+                        if gene_start < original_start or gene_end > original_end:
+                            transcript.quality_flags.add("gene_expanded")
                     
                     # Write gene feature with updated boundaries (preserve original chromosome and source)
                     chrom = transcript.chrom or "LAT_C01"  # Use original chromosome name
@@ -821,17 +918,27 @@ class OutputGenerator:
                     transcript = gene.representative
                     
                     # Calculate updated gene boundaries based on representative transcript
-                    gene_start = transcript.start
-                    gene_end = transcript.end
+                    # Include all exons to ensure proper gene boundary calculation
+                    if transcript.exons:
+                        exon_starts = [e.start for e in transcript.exons]
+                        exon_ends = [e.end for e in transcript.exons]
+                        gene_start = min(exon_starts)
+                        gene_end = max(exon_ends)
+                    else:
+                        gene_start = transcript.start
+                        gene_end = transcript.end
                     
-                    # Check if gene boundaries have changed (shrunk)
+                    # Check if gene boundaries have changed (shrunk or expanded)
                     original_gene_spans = [t.start for t in gene.transcripts] + [t.end for t in gene.transcripts]
                     original_start = min(original_gene_spans)
                     original_end = max(original_gene_spans)
                     
-                    if gene_start > original_start or gene_end < original_end:
+                    if gene_start != original_start or gene_end != original_end:
                         transcript.quality_flags.add("gene_boundaries_updated")
-                        transcript.quality_flags.add("gene_shrunk")
+                        if gene_start > original_start or gene_end < original_end:
+                            transcript.quality_flags.add("gene_shrunk")
+                        if gene_start < original_start or gene_end > original_end:
+                            transcript.quality_flags.add("gene_expanded")
                     
                     # Write gene feature with updated boundaries (preserve original chromosome and source)
                     chrom = transcript.chrom or "LAT_C01"  # Use original chromosome name
