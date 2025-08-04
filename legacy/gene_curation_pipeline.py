@@ -208,19 +208,26 @@ class GeneAnnotationParser:
                             parent_id = attr_dict.get('Parent', '')
                         
                         if transcript_id and parent_id:
-                            transcript = Transcript(
-                                id=transcript_id,
-                                gene_id=parent_id,
-                                start=start,
-                                end=end,
-                                strand=strand,
-                                chrom=chrom,
-                                source=source
-                            )
-                            self.transcripts[transcript_id] = transcript
-                            if parent_id in self.genes:
-                                self.genes[parent_id].transcripts.append(transcript)
-                            transcript_count += 1
+                            # Check if transcript already exists to avoid duplicates
+                            if transcript_id not in self.transcripts:
+                                transcript = Transcript(
+                                    id=transcript_id,
+                                    gene_id=parent_id,
+                                    start=start,
+                                    end=end,
+                                    strand=strand,
+                                    chrom=chrom,
+                                    source=source
+                                )
+                                self.transcripts[transcript_id] = transcript
+                                if parent_id in self.genes:
+                                    self.genes[parent_id].transcripts.append(transcript)
+                                transcript_count += 1
+                            else:
+                                # Update coordinates if this feature has different boundaries
+                                existing_transcript = self.transcripts[transcript_id]
+                                existing_transcript.start = min(existing_transcript.start, start)
+                                existing_transcript.end = max(existing_transcript.end, end)
                     
                     elif feature in ['exon', 'CDS', 'start_codon', 'stop_codon']:
                         if file_type == "GTF":
@@ -339,6 +346,9 @@ class AnnotationCurator:
         """Curate annotations with O(n) complexity - sequence-based quality only."""
         logging.info("Starting annotation curation (sequence-first approach)")
         
+        # Ensure all CDS regions have corresponding exons (fix for GeneMark.hmm3-style annotations)
+        self._ensure_cds_have_exons(genes)
+        
         curated_count = 0
         for gene in genes.values():
             for transcript in gene.transcripts:
@@ -369,6 +379,43 @@ class AnnotationCurator:
         
         logging.info(f"Curated {curated_count} transcripts (sequence-based quality only)")
         return genes
+    
+    def _ensure_cds_have_exons(self, genes: Dict[str, Gene]) -> None:
+        """Ensure all CDS regions have corresponding exons - creates exons for orphaned CDS."""
+        exons_created = 0
+        transcripts_fixed = 0
+        
+        for gene in genes.values():
+            for transcript in gene.transcripts:
+                if not transcript.cds_regions:
+                    continue  # Skip transcripts without CDS
+                
+                transcript_modified = False
+                for cds in transcript.cds_regions:
+                    # Check if this CDS region is covered by any existing exon
+                    is_covered = False
+                    for exon in transcript.exons:
+                        if exon.start <= cds.start and cds.end <= exon.end:
+                            is_covered = True
+                            break
+                    
+                    # If CDS is not covered by any exon, create a matching exon
+                    if not is_covered:
+                        new_exon = Exon(
+                            start=cds.start,
+                            end=cds.end,
+                            strand=cds.strand,
+                            id=f"{transcript.id}_exon_for_cds_{cds.start}_{cds.end}"
+                        )
+                        transcript.exons.append(new_exon)
+                        exons_created += 1
+                        transcript_modified = True
+                
+                if transcript_modified:
+                    transcript.quality_flags.add("created_exon_for_cds")
+                    transcripts_fixed += 1
+        
+        logging.info(f"Created {exons_created} exons for {transcripts_fixed} transcripts with orphaned CDS regions")
     
     def _is_codon_within_features(self, codon: Codon, exons: List[Exon], cds_regions: List[CDS]) -> bool:
         """Check if codon is within existing exons/CDS using O(n) complexity."""
@@ -966,15 +1013,9 @@ class OutputGenerator:
                     for cds in transcript.cds_regions:
                         f.write(f"{chrom}\t{source}\tCDS\t{cds.start}\t{cds.end}\t.\t{cds.strand}\t{cds.phase}\ttranscript_id \"{transcript.id}\"; gene_id \"{gene.id}\";\n")
                     
-                    # Write start_codon if present
-                    if transcript.start_codon:
-                        sc = transcript.start_codon
-                        f.write(f"{chrom}\t{source}\tstart_codon\t{sc.start}\t{sc.end}\t.\t{sc.strand}\t0\ttranscript_id \"{transcript.id}\"; gene_id \"{gene.id}\";\n")
-                    
-                    # Write stop_codon if present
-                    if transcript.stop_codon:
-                        sc = transcript.stop_codon
-                        f.write(f"{chrom}\t{source}\tstop_codon\t{sc.start}\t{sc.end}\t.\t{sc.strand}\t0\ttranscript_id \"{transcript.id}\"; gene_id \"{gene.id}\";\n")
+                    # NOTE: start_codon and stop_codon features are NOT written to output
+                    # Per CLAUDE.md specification, after codon integration these features
+                    # are redundant since they are now covered by merged exons/CDS regions
     
     def _write_cleaned_sequences(self, genes: Dict[str, Gene], sequence_handler: SequenceHandler) -> None:
         """Write cleaned CDS and AA sequences."""
