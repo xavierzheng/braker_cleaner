@@ -59,10 +59,10 @@ class OutputGenerator:
             
             # Process genes with representatives
             for gene in genes.values():
-                if not gene.representative_transcript:
+                if not gene.representative:
                     continue
                 
-                transcript = gene.representative_transcript
+                transcript = gene.representative
                 
                 # Update gene boundaries based on transcript
                 gene_start = min(transcript.start, min((e.start for e in transcript.exons), default=transcript.start))
@@ -145,10 +145,10 @@ class OutputGenerator:
         
         with open(output_file, 'w') as f:
             for gene in genes.values():
-                if not gene.representative_transcript:
+                if not gene.representative:
                     continue
                 
-                transcript = gene.representative_transcript
+                transcript = gene.representative
                 sequence = cds_sequences.get(transcript.id, transcript.cds_sequence)
                 
                 if not sequence:
@@ -176,10 +176,10 @@ class OutputGenerator:
         
         with open(output_file, 'w') as f:
             for gene in genes.values():
-                if not gene.representative_transcript:
+                if not gene.representative:
                     continue
                 
-                transcript = gene.representative_transcript
+                transcript = gene.representative
                 sequence = aa_sequences.get(transcript.id, transcript.aa_sequence)
                 
                 if not sequence:
@@ -216,7 +216,7 @@ class OutputGenerator:
         
         manual_review_genes = []
         for gene in genes.values():
-            if not gene.representative_transcript:
+            if not gene.representative:
                 # Gene has no representative - needs manual review
                 transcript_ids = [t.id for t in gene.transcripts]
                 quality_flags = set()

@@ -273,7 +273,7 @@ class GeneCurationPipeline:
             # Collect statistics
             total_genes = len(self.genes)
             total_transcripts = sum(len(gene.transcripts) for gene in self.genes.values())
-            selected_genes = sum(1 for gene in self.genes.values() if gene.representative_transcript)
+            selected_genes = sum(1 for gene in self.genes.values() if gene.representative)
             
             # Performance summary
             performance = self.monitor.get_performance_summary()

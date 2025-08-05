@@ -164,20 +164,30 @@ for each transcript with merged coordinates:
 
 ### Phase C: Representative Selection (Sequence-First Approach)
 
-#### C1. Quality-Based Pre-filtering
-**Criteria** (Applied BEFORE spatial analysis):
-1. Minimum amino acid length threshold (default: 50, configurable)
+#### C1. Quality-Based Hard Filtering
+**Criteria** (Applied BEFORE spatial analysis - HARD FILTERING):
+1. Minimum amino acid length threshold (default: 50, configurable) - **REQUIRED**
 2. Start codon requirement (configurable)
 3. Stop codon requirement (configurable)
 4. Maximum internal stop codons (default: 0)
+
+**CRITICAL**: Genes with NO transcripts meeting these criteria are **EXCLUDED** from output entirely.
 
 #### C2. MD5 Hash-Based Grouping
 **Process**:
 ```
 for each gene:
+    # Apply hard filtering first
+    quality_transcripts = filter_by_quality(gene.transcripts)
+    
+    if not quality_transcripts:
+        # NO transcripts meet criteria - gene EXCLUDED from output
+        gene.representative_transcript = None
+        continue
+    
     # Group transcripts by protein sequence identity
     hash_groups = defaultdict(list)
-    for transcript in gene.high_quality_transcripts:
+    for transcript in quality_transcripts:
         aa_hash = md5(transcript.aa_sequence).hexdigest()
         hash_groups[aa_hash].append(transcript)
     
@@ -396,12 +406,12 @@ Phase breakdown:
 ```
 
 ### Quality Achievements
-- ✅ **100% Selection Success**: 52,860/52,860 genes get representatives
-- ✅ **0% Manual Review Rate**: No genes require manual intervention
+- ✅ **Hard Filtering**: Genes not meeting --min-length threshold are excluded entirely
 - ✅ **Complete Codon Integration**: All start/stop codons properly processed
 - ✅ **Perfect Format Preservation**: Input format maintained in output
 - ✅ **Memory Efficiency**: <16% memory utilization for large datasets
 - ✅ **Data Safety**: Original files never modified
+- ✅ **Quality Control**: Only high-quality gene models in final output
 
 ## Error Handling and Troubleshooting
 
@@ -434,10 +444,11 @@ PipelineError                 # Base exception
 ### Current Results
 The implemented pipeline achieves **0% manual review rate** for typical datasets.
 
-**Manual Review Only Required For**:
+**Manual Review Required For**:
 - Genes where ALL transcripts are below minimum length threshold
+- Genes where ALL transcripts fail quality criteria (no start codon, internal stops, etc.)
 - Reason: `no_representative_selected`
-- Typical rate: <1% of genes
+- **These genes are EXCLUDED from cleaned output files**
 
 **Automatically Handled Cases** (No Manual Review):
 - Genes with spatial conflicts → Tracked but selected automatically
@@ -461,10 +472,10 @@ Old approach: Create separate codon features → Fragmented annotations
 New approach: Detect orphaned CDS → Create exons → Merge adjacent → Reconstruct
 ```
 
-### 2. Sequence-First Selection with Spatial Deferral
+### 2. Hard Filtering with Sequence-First Selection
 ```
 Old approach: Spatial filtering → Selection → Manual review (94% failure)
-New approach: Quality filtering → Selection → Spatial tracking (0% failure)
+New approach: Hard quality filtering → Gene exclusion → Selection → Spatial tracking
 ```
 
 ### 3. Genome-Based Sequence Reconstruction  
@@ -512,11 +523,11 @@ New approach: Modular package with complexity validation and comprehensive testi
 **After**: Professional modular package with 58 comprehensive tests and O(n log n) validation
 
 ### Quality Metrics
-- **Perfect Selection**: 100% of genes receive representatives
-- **Zero Manual Review**: 0% of genes require manual intervention  
+- **Hard Filtering**: Genes not meeting quality criteria are excluded from output
+- **Quality-Based Selection**: Only genes with qualifying transcripts receive representatives
 - **Complete Integration**: All codon features properly merged and reconstructed
 - **Format Integrity**: Perfect preservation of input format and metadata
-- **Performance Excellence**: 17.25 seconds for 52,860 genes with <16% memory usage
+- **Performance Excellence**: Fast processing with <16% memory usage
 - **Professional Standards**: Comprehensive testing, error handling, and documentation
 
 This specification represents the complete implementation of a production-ready gene annotation curation pipeline with proven results on large-scale genomic datasets.

@@ -252,16 +252,16 @@ class TranscriptSelector:
         self.spatial_conflicts: List[Dict] = []
     
     def select_representative(self, gene: Gene) -> Optional[Transcript]:
-        """Select representative transcript for a gene using sequence-first approach."""
+        """Select representative transcript for a gene using sequence-first approach with hard filtering."""
         if not gene.transcripts:
             return None
         
-        # Step 1: Filter by sequence quality only
+        # Step 1: Filter by sequence quality only (hard filtering - no fallback)
         quality_transcripts = self._filter_by_quality(gene.transcripts)
         
         if not quality_transcripts:
-            # No quality transcripts - select best available (pragmatic approach)
-            quality_transcripts = gene.transcripts
+            # No transcripts meet quality criteria - gene will be excluded from output
+            return None
         
         # Step 2: Group by sequence similarity (MD5 hash)
         hash_groups = self._group_by_sequence_hash(quality_transcripts)
@@ -272,7 +272,7 @@ class TranscriptSelector:
         
         # Mark as representative
         representative.quality_flags.add("representative")
-        gene.representative_transcript = representative
+        gene.representative = representative
         
         return representative
     
@@ -313,8 +313,8 @@ class TranscriptSelector:
         # Build interval tree with representatives only
         representatives = []
         for gene in genes.values():
-            if gene.representative_transcript:
-                representatives.append(gene.representative_transcript)
+            if gene.representative:
+                representatives.append(gene.representative)
         
         # Group by chromosome for efficiency
         chrom_trees = defaultdict(lambda: IntervalTree())
