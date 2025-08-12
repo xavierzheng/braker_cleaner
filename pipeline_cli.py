@@ -135,13 +135,13 @@ def main():
         config = load_config(config_path=args.config, use_env=True)
         
         # Override config with command line arguments
-        if args.min_length:
+        if args.min_length is not None:
             config.min_aa_length = args.min_length
-        if args.overlap_threshold:
+        if args.overlap_threshold is not None:
             config.overlap_threshold = args.overlap_threshold
-        if args.memory_limit:
+        if args.memory_limit is not None:
             config.memory_limit_mb = args.memory_limit
-        if args.batch_size:
+        if args.batch_size is not None:
             config.batch_size = args.batch_size
         
         # Create output directory
