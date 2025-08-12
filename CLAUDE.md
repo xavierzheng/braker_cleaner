@@ -17,6 +17,42 @@ This professional gene annotation curation pipeline transforms monolithic BRAKER
 - **🚫 Zero Manual Review**: Eliminates false positives through pragmatic selection
 - **🧠 Sequence-First Approach**: Prioritizes biological equivalence over spatial conflicts
 - **📏 Enhanced Gene Boundaries**: Updates gene coordinates based on merged codon regions
+- **🔧 Robust Coordinate Validation**: Supports all biologically valid genomic features including single-nucleotide CDS/exons
+
+## Critical Coordinate Validation Fix
+
+### Issue Resolution
+**Fixed a critical coordinate validation bug** that incorrectly rejected valid single-nucleotide genomic features:
+
+**Previous Buggy Logic** (rejected valid 1bp features):
+```python
+if self.start >= self.end:  # WRONG: Rejects start=end (1bp features)
+    raise ValueError("Invalid coordinates")
+```
+
+**Corrected Logic** (accepts valid 1bp features):  
+```python
+if self.start > self.end:   # CORRECT: Only rejects reversed coordinates
+    raise ValueError("Invalid coordinates")
+```
+
+### Impact
+- **Biological Accuracy**: Single-nucleotide CDS regions (e.g., 12094314-12094314) are now properly processed
+- **Parsing Success**: Genes with 1bp CDS/exon features are no longer incorrectly excluded during parsing
+- **Quality Flag Accuracy**: `cds_frame_error` flags now correctly identify actual frame errors rather than parsing artifacts
+- **Test Coverage**: Updated 2 unit tests to verify 1bp features are valid while maintaining error detection for truly invalid cases
+
+### Examples of Valid Single-Nucleotide Features
+```
+CDS	12094314	12094314	.	-	1	# Valid 1bp CDS region
+exon	5000000	5000000	.	+	.	# Valid 1bp exon
+stop_codon	1234567	1234567	.	+	0	# Valid 1bp stop codon
+```
+
+These features commonly occur in:
+- **Phase adjustments** between multi-exon genes
+- **Split codons** across exon boundaries  
+- **Complex gene structures** with fragmented CDS regions
 
 ## Architecture Overview
 
@@ -441,8 +477,12 @@ for transcript in representative_transcripts:
 
 #### Preprocessing Flags
 - `created_exon_for_orphaned_cds`: New exon created for CDS without exon coverage
-- `created_start_codon_features`: Start codon features created and processed
+- `created_start_codon_features`: Start codon features created and processed  
 - `created_stop_codon_features`: Stop codon features created and processed
+
+#### Coordinate Validation Flags
+- **Fixed**: Single-nucleotide features (1bp CDS/exons) now parse correctly without generating false `cds_frame_error` flags
+- **Improved**: `cds_frame_error` now only flags actual reading frame problems, not coordinate parsing artifacts
 
 #### Codon Integration Flags
 - `merged_start_codon_with_adjacent`: Start codon merged with existing exon/CDS
@@ -705,6 +745,7 @@ New approach: Modular package with complexity validation and comprehensive testi
 - **🔧 CRITICAL BUG FIXES**: Stop codon integration and negative strand reconstruction corrected
 - **🧬 Sequence Accuracy**: `cleaned.cds.fa` now matches `cleaned.gtf/gff3` coordinates exactly
 - **✅ Stop Codon Preservation**: Output CDS sequences contain proper stop codons (TAA/TAG/TGA)
+- **🎯 Coordinate Validation**: Single-nucleotide features (1bp) processed correctly - no false rejections
 
 ### Critical Fixes Applied
 This version includes **critical bug fixes** that ensure:
@@ -713,6 +754,7 @@ This version includes **critical bug fixes** that ensure:
 3. **Negative strand genes** have correct reading frame and codon positioning  
 4. **Sequence reconstruction prioritizes** merged coordinates over original BRAKER sequences
 5. **Quality flags track** reconstruction method (`cds_reconstructed_from_merged_coordinates`)
+6. **Single-nucleotide features** (1bp CDS/exons) are properly validated and processed without false rejections
 
 **Verification Examples**:
 

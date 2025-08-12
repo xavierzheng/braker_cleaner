@@ -468,8 +468,10 @@ SEQUENCE_DATA
 | `short_transcript` | Length Validation | Below minimum amino acid length threshold | When AA sequence length < min_aa_length parameter (default: 50) |
 | `empty_aa_sequence` | Sequence Validation | Amino acid sequence is empty or missing | When transcript has no valid AA sequence data |
 | `low_quality_no_start_codon` | Sequence Validation | AA sequence does not start with methionine (M) | When AA sequence lacks proper start codon translation |
+| `low_quality_no_stop_codon` | Sequence Validation | CDS sequence does not end with stop codon | When CDS sequence lacks proper stop codon (TAA/TAG/TGA) |
 | `low_quality_no_codons` | Sequence Validation | No start or stop codon features found | When transcript lacks both start_codon and stop_codon annotations |
 | `internal_stop_codons` | Sequence Validation | Contains internal stop codons (*) within sequence | When AA sequence has stop codons before the terminal position |
+| `cds_frame_error` | Sequence Validation | CDS sequence length not divisible by 3 | When CDS sequence has incorrect reading frame |
 | **Selection Status Tags** | | | |
 | `representative` | Transcript Selection | Selected as gene representative | When transcript is chosen as the best representative for its gene |
 | `post_selection_overlap` | Spatial Analysis | Spatial overlap detected after selection | When representative transcript overlaps with another gene's representative |
@@ -486,17 +488,20 @@ Common tag combinations and their meanings:
 - `representative,merged_stop_codon_with_adjacent,passed_aa_validation` - Representative with successfully integrated stop codon
 - `short_transcript` - Transcript excluded from output due to length filtering
 - `internal_stop_codons` - Transcript excluded due to sequence quality issues
+- `low_quality_no_start_codon` - Transcript excluded due to missing start codon (M)
+- `low_quality_no_stop_codon` - Transcript excluded due to missing stop codon (TAA/TAG/TGA)
+- `cds_frame_error` - Transcript excluded due to incorrect reading frame
 - `post_selection_overlap,representative` - Representative transcript with spatial conflicts (non-blocking)
 
 ### Quality Control Usage
 
 **For High-Quality Transcripts** (included in output):
-- Must NOT have: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`
+- Must NOT have: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`, `low_quality_no_start_codon`, `low_quality_no_stop_codon`, `cds_frame_error`
 - Should have: `representative`, `passed_aa_validation` or `validated_cds`
 - May have: `cds_reconstructed_from_merged_coordinates` (preferred), codon integration tags
 
 **For Excluded Transcripts** (manual review file):
-- Have any of: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`
+- Have any of: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`, `low_quality_no_start_codon`, `low_quality_no_stop_codon`, `cds_frame_error`
 - Reason: `no_representative_selected`
 
 ### Implementation Notes
@@ -506,6 +511,7 @@ Common tag combinations and their meanings:
 3. **Quality Filtering**: Tags are used for hard filtering - genes with no qualifying transcripts are excluded entirely
 4. **Reconstruction Priority**: `cds_reconstructed_from_merged_coordinates` indicates sequences rebuilt from integrated coordinates (preferred over original BRAKER sequences)
 5. **Stop Codon Handling**: Terminal stop codons (*) are removed from AA sequences but preserved as nucleotides in CDS sequences
+6. **Coordinate Validation**: Single-nucleotide features (start=end) are biologically valid and properly processed - only reversed coordinates (start > end) are rejected
 
 ## Citation
 

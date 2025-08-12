@@ -273,11 +273,15 @@ class TestCodonValidation(unittest.TestCase):
     
     def test_invalid_codon_coordinates(self):
         """Test that invalid codon coordinates raise errors."""
-        with self.assertRaises(ValueError):
-            Codon(start=100, end=100, strand="+", codon_type="start")  # start == end
-        
+        # Only reversed coordinates should raise error (start > end)
         with self.assertRaises(ValueError):
             Codon(start=100, end=99, strand="+", codon_type="start")   # start > end
+            
+        # Single bp coordinates should be valid (start == end)
+        # This should NOT raise an error
+        codon = Codon(start=100, end=100, strand="+", codon_type="start")
+        self.assertEqual(codon.start, 100)
+        self.assertEqual(codon.end, 100)
     
     def test_invalid_codon_type(self):
         """Test that invalid codon types raise errors."""

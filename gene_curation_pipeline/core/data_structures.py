@@ -9,7 +9,7 @@ exons, CDS regions, and codons with proper relationships and methods.
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Set, Optional, Tuple
 
 
 @dataclass
@@ -23,7 +23,7 @@ class Codon:
     
     def __post_init__(self):
         """Validate codon data after initialization."""
-        if self.start >= self.end:
+        if self.start > self.end:
             raise ValueError(f"Invalid codon coordinates: {self.start}-{self.end}")
         if self.codon_type not in ('start', 'stop'):
             raise ValueError(f"Invalid codon type: {self.codon_type}")
@@ -41,7 +41,7 @@ class Exon:
     
     def __post_init__(self):
         """Validate exon data after initialization."""
-        if self.start >= self.end:
+        if self.start > self.end:
             raise ValueError(f"Invalid exon coordinates: {self.start}-{self.end}")
         if self.strand not in ('+', '-'):
             raise ValueError(f"Invalid strand: {self.strand}")
@@ -71,7 +71,7 @@ class CDS:
     
     def __post_init__(self):
         """Validate CDS data after initialization."""
-        if self.start >= self.end:
+        if self.start > self.end:
             raise ValueError(f"Invalid CDS coordinates: {self.start}-{self.end}")
         if self.strand not in ('+', '-'):
             raise ValueError(f"Invalid strand: {self.strand}")
@@ -113,7 +113,7 @@ class Transcript:
     
     def __post_init__(self):
         """Validate transcript data after initialization."""
-        if self.start >= self.end:
+        if self.start > self.end:
             raise ValueError(f"Invalid transcript coordinates: {self.start}-{self.end}")
         if self.strand not in ('+', '-'):
             raise ValueError(f"Invalid strand: {self.strand}")
@@ -258,7 +258,7 @@ class Gene:
         """Check if gene has a representative transcript."""
         return self.representative is not None
     
-    def get_gene_boundaries(self) -> tuple[int, int]:
+    def get_gene_boundaries(self) -> Tuple[int, int]:
         """Get gene boundaries based on all transcripts."""
         if not self.transcripts:
             return 0, 0
@@ -267,7 +267,7 @@ class Gene:
         ends = [t.end for t in self.transcripts]
         return min(starts), max(ends)
     
-    def get_representative_boundaries(self) -> tuple[int, int]:
+    def get_representative_boundaries(self) -> Tuple[int, int]:
         """Get gene boundaries based on representative transcript's exons."""
         if not self.representative or not self.representative.exons:
             return self.get_gene_boundaries()

@@ -148,10 +148,15 @@ class AnnotationCurator:
 class SequenceValidator:
     """Phase B: Validate and correct sequences."""
     
-    def __init__(self, min_aa_length: int = 50, max_internal_stops: int = 0, genome=None):
+    def __init__(self, min_aa_length: int = 50, max_internal_stops: int = 0, genome=None, 
+                 require_start_codon: bool = True, require_stop_codon: bool = True, 
+                 cds_sequences: Dict[str, str] = None):
         self.min_aa_length = min_aa_length
         self.max_internal_stops = max_internal_stops
         self.genome = genome
+        self.require_start_codon = require_start_codon
+        self.require_stop_codon = require_stop_codon
+        self.cds_sequences = cds_sequences or {}
     
     def validate_transcript(self, transcript: Transcript) -> None:
         """Validate and correct a single transcript's sequences."""
@@ -169,8 +174,12 @@ class SequenceValidator:
         # CDS sequence reconstruction if genome available
         if self.genome:
             self._reconstruct_cds_sequence(transcript)
+            # CDS validation AFTER reconstruction (validates merged coordinates)
+            self._validate_cds_sequence(transcript)
         else:
             transcript.quality_flags.add("validated_cds")
+            # CDS validation of original sequence when no genome available
+            self._validate_cds_sequence(transcript)
     
     def _validate_aa_sequence(self, transcript: Transcript) -> None:
         """Validate amino acid sequence."""
@@ -181,7 +190,7 @@ class SequenceValidator:
             return
         
         # Check for start codon
-        if not aa_seq.startswith('M'):
+        if self.require_start_codon and not aa_seq.startswith('M'):
             transcript.quality_flags.add("low_quality_no_start_codon")
         
         # Check for internal stop codons
@@ -190,6 +199,36 @@ class SequenceValidator:
             transcript.quality_flags.add("internal_stop_codons")
         else:
             transcript.quality_flags.add("passed_aa_validation")
+    
+    def _validate_cds_sequence(self, transcript: Transcript) -> None:
+        """Validate CDS sequence for stop codon presence."""
+        if not self.require_stop_codon:
+            return
+        
+        # Get CDS sequence (prioritize reconstructed from merged coordinates)
+        cds_seq = transcript.cds_sequence or self.cds_sequences.get(transcript.id, "")
+        
+        if not cds_seq:
+            # No CDS sequence available to validate
+            return
+        
+        # Clean and normalize sequence
+        cds_seq = cds_seq.strip().upper()
+        
+        # Check if sequence length is multiple of 3 (proper reading frame)
+        if len(cds_seq) % 3 != 0:
+            transcript.quality_flags.add("cds_frame_error")
+            return
+        
+        # Check for stop codon at end (TAA, TAG, TGA)
+        if len(cds_seq) >= 3:
+            last_codon = cds_seq[-3:]
+            if last_codon not in ['TAA', 'TAG', 'TGA']:
+                transcript.quality_flags.add("low_quality_no_stop_codon")
+            # Add debug logging to understand what we're validating
+            logging.debug(f"Validating {transcript.id}: length={len(cds_seq)}, "
+                         f"last_codon={last_codon}, "
+                         f"source={'reconstructed' if transcript.cds_sequence else 'original'}")
     
     def _reconstruct_cds_sequence(self, transcript: Transcript) -> None:
         """Reconstruct CDS sequence from genome coordinates."""
@@ -304,6 +343,12 @@ class TranscriptSelector:
             if "low_quality_no_codons" in transcript.quality_flags:
                 continue
             if "internal_stop_codons" in transcript.quality_flags:
+                continue
+            if "low_quality_no_start_codon" in transcript.quality_flags:
+                continue
+            if "low_quality_no_stop_codon" in transcript.quality_flags:
+                continue
+            if "cds_frame_error" in transcript.quality_flags:
                 continue
             
             quality_transcripts.append(transcript)

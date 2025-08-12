@@ -194,7 +194,10 @@ class GeneCurationPipeline:
                 self.validator = SequenceValidator(
                     self.config.min_aa_length,
                     self.config.max_internal_stops,
-                    self.sequence_handler.genome if self.sequence_handler else None
+                    self.sequence_handler.genome if self.sequence_handler else None,
+                    self.config.require_start_codon,
+                    self.config.require_stop_codon,
+                    self.sequence_handler.cds_sequences if self.sequence_handler else {}
                 )
                 
                 # Process transcripts
