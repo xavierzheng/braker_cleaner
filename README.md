@@ -436,6 +436,77 @@ All algorithms maintain **O(n log n)** or better complexity:
 - ✅ **Format Integrity**: Perfect preservation of original file formats
 - ✅ **Data Safety**: Original files never modified
 
+## FASTA Header Quality Tags
+
+The pipeline adds quality flags as comments to FASTA headers in both `cleaned.cds.fa` and `cleaned.aa` files. These tags provide detailed information about processing decisions and sequence quality.
+
+### Header Format
+```
+>transcript_id # tag1,tag2,tag3
+SEQUENCE_DATA
+```
+
+### Complete Tag Reference Table
+
+| Tag | Category | Description | When Added |
+|-----|----------|-------------|------------|
+| **Preprocessing Tags** | | | |
+| `created_exon_for_cds` | Annotation Curation | New exon created for CDS without exon coverage | When GeneMark.hmm3 produces CDS regions without corresponding exons |
+| `created_start_codon_features` | Codon Integration | Start codon features created and processed | When start codon coordinates are not covered by existing features |
+| `created_stop_codon_features` | Codon Integration | Stop codon features created and processed | When stop codon coordinates are not covered by existing features |
+| **Codon Integration Tags** | | | |
+| `merged_start_codon_with_adjacent` | Codon Integration | Start codon merged with existing exon/CDS | When start codon is adjacent (≤1bp gap) to existing features |
+| `merged_stop_codon_with_adjacent` | Codon Integration | Stop codon merged with existing exon/CDS | When stop codon is adjacent (≤1bp gap) to existing features |
+| `redundant_start_codon_removed` | Codon Integration | Start codon already covered by existing features | When start codon coordinates are within existing exons AND CDS |
+| `redundant_stop_codon_removed` | Codon Integration | Stop codon already covered by existing features | When stop codon coordinates are within existing exons AND CDS |
+| **Sequence Quality Tags** | | | |
+| `cds_reconstructed_from_merged_coordinates` | Sequence Reconstruction | CDS sequence rebuilt from genome using merged coordinates | When genome reference is available and CDS is reconstructed from integrated coordinates |
+| `validated_cds` | Sequence Validation | CDS sequence validated without reconstruction | When genome reference is not available but CDS passes validation |
+| `passed_aa_validation` | Sequence Validation | Amino acid sequence passed all quality checks | When AA sequence has proper start codon, no internal stops, and adequate length |
+| `cds_reconstruction_failed` | Sequence Validation | Failed to reconstruct CDS from genome coordinates | When genome extraction or sequence reconstruction encounters errors |
+| **Quality Issue Tags** | | | |
+| `short_transcript` | Length Validation | Below minimum amino acid length threshold | When AA sequence length < min_aa_length parameter (default: 50) |
+| `empty_aa_sequence` | Sequence Validation | Amino acid sequence is empty or missing | When transcript has no valid AA sequence data |
+| `low_quality_no_start_codon` | Sequence Validation | AA sequence does not start with methionine (M) | When AA sequence lacks proper start codon translation |
+| `low_quality_no_codons` | Sequence Validation | No start or stop codon features found | When transcript lacks both start_codon and stop_codon annotations |
+| `internal_stop_codons` | Sequence Validation | Contains internal stop codons (*) within sequence | When AA sequence has stop codons before the terminal position |
+| **Selection Status Tags** | | | |
+| `representative` | Transcript Selection | Selected as gene representative | When transcript is chosen as the best representative for its gene |
+| `post_selection_overlap` | Spatial Analysis | Spatial overlap detected after selection | When representative transcript overlaps with another gene's representative |
+| **Gene Boundary Tags** | | | |
+| `gene_boundaries_updated` | Gene Processing | Gene coordinates adjusted after processing | When gene boundaries change due to codon integration or exon merging |
+| `gene_expanded` | Gene Processing | Gene range increased to include merged features | When integrated codons extend gene boundaries beyond original coordinates |
+| `gene_shrunk` | Gene Processing | Gene range reduced after transcript filtering | When representative selection results in smaller gene boundaries |
+
+### Tag Combinations
+
+Common tag combinations and their meanings:
+
+- `representative,cds_reconstructed_from_merged_coordinates,passed_aa_validation` - High-quality representative with genome-based sequence reconstruction
+- `representative,merged_stop_codon_with_adjacent,passed_aa_validation` - Representative with successfully integrated stop codon
+- `short_transcript` - Transcript excluded from output due to length filtering
+- `internal_stop_codons` - Transcript excluded due to sequence quality issues
+- `post_selection_overlap,representative` - Representative transcript with spatial conflicts (non-blocking)
+
+### Quality Control Usage
+
+**For High-Quality Transcripts** (included in output):
+- Must NOT have: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`
+- Should have: `representative`, `passed_aa_validation` or `validated_cds`
+- May have: `cds_reconstructed_from_merged_coordinates` (preferred), codon integration tags
+
+**For Excluded Transcripts** (manual review file):
+- Have any of: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`
+- Reason: `no_representative_selected`
+
+### Implementation Notes
+
+1. **Tag Order**: Tags are alphabetically sorted in output headers for consistency
+2. **Tag Persistence**: Tags are added throughout processing and persist in final output
+3. **Quality Filtering**: Tags are used for hard filtering - genes with no qualifying transcripts are excluded entirely
+4. **Reconstruction Priority**: `cds_reconstructed_from_merged_coordinates` indicates sequences rebuilt from integrated coordinates (preferred over original BRAKER sequences)
+5. **Stop Codon Handling**: Terminal stop codons (*) are removed from AA sequences but preserved as nucleotides in CDS sequences
+
 ## Citation
 
 If you use this pipeline in your research, please cite:
