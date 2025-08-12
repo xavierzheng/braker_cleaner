@@ -197,18 +197,21 @@ class SequenceValidator:
             return
         
         try:
-            # Sort CDS regions by coordinate
+            # Sort CDS regions by genomic coordinate (always ascending)
             sorted_cds = sorted(transcript.cds_regions, key=lambda x: x.start)
-            if transcript.strand == '-':
-                sorted_cds = sorted(sorted_cds, key=lambda x: x.start, reverse=True)
             
-            # Reconstruct sequence
+            # Reconstruct sequence by concatenating genomic segments
             reconstructed_seq = ""
             for cds in sorted_cds:
-                cds_segment = self._extract_genome_sequence(
-                    transcript.chrom, cds.start, cds.end, transcript.strand
+                # Extract genomic sequence (always forward strand)
+                cds_segment = self._extract_genome_sequence_forward(
+                    transcript.chrom, cds.start, cds.end
                 )
                 reconstructed_seq += cds_segment
+            
+            # Apply strand correction to the entire sequence
+            if transcript.strand == '-':
+                reconstructed_seq = self._reverse_complement(reconstructed_seq)
             
             # Update transcript sequence
             if reconstructed_seq:
@@ -219,8 +222,22 @@ class SequenceValidator:
             logging.warning(f"Failed to reconstruct CDS for {transcript.id}: {e}")
             transcript.quality_flags.add("cds_reconstruction_failed")
     
+    def _extract_genome_sequence_forward(self, chrom: str, start: int, end: int) -> str:
+        """Extract sequence from genome (always forward strand)."""
+        if not self.genome:
+            return ""
+        
+        try:
+            # pyfaidx uses 0-based indexing, GFF uses 1-based
+            sequence = str(self.genome[chrom][start-1:end])
+            return sequence.upper()
+        
+        except Exception as e:
+            logging.warning(f"Failed to extract sequence {chrom}:{start}-{end}: {e}")
+            return ""
+    
     def _extract_genome_sequence(self, chrom: str, start: int, end: int, strand: str) -> str:
-        """Extract sequence from genome."""
+        """Extract sequence from genome (legacy method for compatibility)."""
         if not self.genome:
             return ""
         

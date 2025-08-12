@@ -140,7 +140,7 @@ class OutputGenerator:
     
     def _generate_cleaned_cds(self, genes: Dict[str, Gene], cds_sequences: Dict[str, str],
                              output_path: Path) -> str:
-        """Generate cleaned CDS sequences."""
+        """Generate cleaned CDS sequences from merged coordinates (genome-based reconstruction)."""
         output_file = output_path / "cleaned.cds.fa"
         
         with open(output_file, 'w') as f:
@@ -149,7 +149,8 @@ class OutputGenerator:
                     continue
                 
                 transcript = gene.representative
-                sequence = cds_sequences.get(transcript.id, transcript.cds_sequence)
+                # Prioritize reconstructed sequence from merged coordinates over original
+                sequence = transcript.cds_sequence or cds_sequences.get(transcript.id, "")
                 
                 if not sequence:
                     continue
@@ -171,7 +172,7 @@ class OutputGenerator:
     
     def _generate_cleaned_aa(self, genes: Dict[str, Gene], aa_sequences: Dict[str, str],
                             output_path: Path) -> str:
-        """Generate cleaned amino acid sequences."""
+        """Generate cleaned amino acid sequences with terminal stop codons removed."""
         output_file = output_path / "cleaned.aa"
         
         with open(output_file, 'w') as f:
@@ -184,6 +185,9 @@ class OutputGenerator:
                 
                 if not sequence:
                     continue
+                
+                # Remove terminal stop codons (*) for clean output
+                sequence = sequence.rstrip('*')
                 
                 # Create header with quality flags
                 header = f">{transcript.id}"
