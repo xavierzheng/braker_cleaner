@@ -327,8 +327,7 @@ class TranscriptSelector:
         representative = max(best_group, key=lambda t: len(t.aa_sequence))
         
         # Mark as representative
-        representative.quality_flags.add("representative")
-        gene.representative = representative
+        gene.set_representative(representative)
         
         return representative
     
@@ -365,6 +364,120 @@ class TranscriptSelector:
             hash_groups[aa_hash].append(transcript)
         
         return hash_groups
+
+    def _rank_gene_candidates(self, gene: Gene) -> List[Tuple[Transcript, int]]:
+        """Rank representative candidates for one gene by sequence-first priorities."""
+        quality_transcripts = self._filter_by_quality(gene.transcripts)
+        if not quality_transcripts:
+            return []
+
+        hash_groups = self._group_by_sequence_hash(quality_transcripts)
+        ranked_candidates: List[Tuple[Transcript, int]] = []
+
+        for group in hash_groups.values():
+            group_size = len(group)
+            for transcript in group:
+                ranked_candidates.append((transcript, group_size))
+
+        # Keep sequence-first preference: frequent AA groups first, then longer proteins/ORFs.
+        ranked_candidates.sort(
+            key=lambda item: (
+                -item[1],  # frequency of AA hash group
+                -item[0].aa_length,
+                -item[0].total_cds_length,
+                -item[0].length,
+                item[0].id
+            )
+        )
+        return ranked_candidates
+
+    def _transcripts_overlap(self, t1: Transcript, t2: Transcript) -> bool:
+        """Return True when two transcripts overlap by >=1bp on the same chromosome."""
+        if t1.chrom != t2.chrom:
+            return False
+        return not (t1.end < t2.start or t1.start > t2.end)
+
+    def enforce_non_overlapping_representatives(self, genes: Dict[str, Gene]) -> int:
+        """Enforce strict no-overlap representatives across genes.
+
+        Used when overlap_threshold == 0. Genes that cannot place any non-overlapping
+        quality transcript are excluded (representative=None).
+        """
+        # Reset existing representative assignments so this step is deterministic.
+        for gene in genes.values():
+            if gene.representative:
+                gene.representative.quality_flags.discard("representative")
+            gene.representative = None
+
+        candidate_map: Dict[str, List[Tuple[Transcript, int]]] = {}
+        for gene_id, gene in genes.items():
+            ranked = self._rank_gene_candidates(gene)
+            if ranked:
+                candidate_map[gene_id] = ranked
+
+        # Global prioritization by each gene's best candidate quality.
+        gene_order = sorted(
+            candidate_map.keys(),
+            key=lambda gene_id: (
+                -candidate_map[gene_id][0][1],  # hash-group support
+                -candidate_map[gene_id][0][0].aa_length,
+                -candidate_map[gene_id][0][0].total_cds_length,
+                -candidate_map[gene_id][0][0].length,
+                gene_id
+            )
+        )
+
+        selected_count = 0
+        dropped_by_overlap = 0
+
+        if INTERVALTREE_AVAILABLE:
+            chrom_trees: Dict[str, IntervalTree] = defaultdict(lambda: IntervalTree())
+        else:
+            chrom_selected: Dict[str, List[Transcript]] = defaultdict(list)
+
+        for gene_id in gene_order:
+            gene = genes[gene_id]
+            assigned = False
+
+            for transcript, _group_size in candidate_map[gene_id]:
+                conflict = False
+
+                if INTERVALTREE_AVAILABLE:
+                    # IntervalTree uses half-open intervals [start, end), while GFF is closed.
+                    overlaps = chrom_trees[transcript.chrom].overlap(transcript.start, transcript.end + 1)
+                    for interval in overlaps:
+                        if self._transcripts_overlap(transcript, interval.data):
+                            conflict = True
+                            break
+                else:
+                    for selected in chrom_selected[transcript.chrom]:
+                        if self._transcripts_overlap(transcript, selected):
+                            conflict = True
+                            break
+
+                if conflict:
+                    continue
+
+                gene.set_representative(transcript)
+                selected_count += 1
+                assigned = True
+
+                if INTERVALTREE_AVAILABLE:
+                    chrom_trees[transcript.chrom].addi(transcript.start, transcript.end + 1, transcript)
+                else:
+                    chrom_selected[transcript.chrom].append(transcript)
+                break
+
+            if not assigned:
+                dropped_by_overlap += 1
+                for transcript, _group_size in candidate_map[gene_id]:
+                    transcript.quality_flags.add("unresolved_spatial_overlap")
+
+        logging.info(
+            "Strict non-overlap enforcement complete: selected %d genes, dropped %d genes due to overlap",
+            selected_count, dropped_by_overlap
+        )
+        return selected_count
     
     def assess_spatial_conflicts(self, genes: Dict[str, Gene]) -> None:
         """Assess spatial conflicts between selected representatives (post-selection)."""

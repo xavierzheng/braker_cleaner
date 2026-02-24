@@ -141,8 +141,8 @@ class PipelineConfig:
         if self.min_aa_length < 1:
             raise ConfigurationError("min_aa_length must be >= 1")
         
-        if not 0 < self.overlap_threshold <= 1:
-            raise ConfigurationError("overlap_threshold must be between 0 and 1")
+        if not 0 <= self.overlap_threshold <= 1:
+            raise ConfigurationError("overlap_threshold must be between 0 and 1 (inclusive)")
         
         if self.memory_limit_mb < 100:
             raise ConfigurationError("memory_limit_mb must be >= 100")

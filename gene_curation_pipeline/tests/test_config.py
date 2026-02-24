@@ -48,7 +48,7 @@ class TestPipelineConfig(unittest.TestCase):
             PipelineConfig(min_aa_length=0)
         
         with self.assertRaises(ConfigurationError):
-            PipelineConfig(overlap_threshold=0)
+            PipelineConfig(overlap_threshold=-0.01)
         
         with self.assertRaises(ConfigurationError):
             PipelineConfig(overlap_threshold=1.5)

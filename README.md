@@ -1,528 +1,204 @@
-# Gene Annotation Curation Pipeline
+# braker_cleaner
 
-A professional, modular gene annotation curation pipeline with comprehensive codon integration, O(n log n) complexity, and zero manual review requirements.
+Clean BRAKER gene models by selecting one representative transcript per gene, validating sequence quality, integrating start/stop codon annotations into exon/CDS coordinates, and generating cleaned annotation/CDS/AA outputs.
 
-## Overview
+## What This Tool Does
 
-This pipeline implements a sequence-first, spatial-second approach to gene annotation curation with **complete start/stop codon integration**. The pipeline has been completely refactored into a professional modular architecture with comprehensive testing and maintains 100% selection success rate with 0% manual review rate.
+- Parses input gene model (`GFF3` or `GTF`) plus CDS/AA FASTA.
+- Integrates codon features into exon/CDS structure when applicable.
+- Applies sequence-quality filtering (length, start/stop codon checks, frame/internal stop checks).
+- Selects one representative transcript per gene.
+- Supports strict non-overlap representative enforcement across genes when `--overlap-threshold 0`.
+- Writes cleaned annotation and sequence files.
 
-## Key Features
+## Requirements
 
-- **🏗️ Professional Modular Architecture**: Clean separation of concerns with dedicated modules
-- **🧪 Comprehensive Testing**: 58 unit tests with 100% pass rate
-- **⚙️ Centralized Configuration**: Flexible configuration management with file/environment support
-- **📊 Enhanced Performance Monitoring**: Real-time memory and complexity validation
-- **🔗 Complete Codon Integration**: Merges start/stop codons with adjacent exon/CDS features
-- **🧬 Genome-Based Sequence Reconstruction**: Rebuilds CDS sequences from merged coordinates
-- **📄 Universal Format Support**: Handles both GFF3 and GTF formats with automatic detection
-- **✅ Perfect Selection Success**: 100% of genes get representative transcripts
-- **🚫 Zero Manual Review**: Eliminates false positives through pragmatic selection
-- **🧠 Sequence-First Approach**: Prioritizes biological equivalence over spatial conflicts
-- **📏 Enhanced Gene Boundaries**: Updates gene coordinates based on merged codon regions
-- **⚡ O(n log n) Complexity**: Efficient processing for large datasets
+- Python 3.8+
+- Python packages:
+  - `pyfaidx`
+  - `intervaltree` (recommended)
+  - `PyYAML` (optional, only if using YAML config files)
 
-## Quick Start
-
-```bash
-# Activate conda environment
-module load miniconda3 && source activate && conda activate braker_cleaner
-
-# Run with GTF format and genome reference (RECOMMENDED)
-python pipeline_cli.py \
-    --gene-model braker.gtf \
-    --cds braker.codingseq \
-    --aa braker.aa \
-    --genome KaleLate.genome.softmask.fa \
-    --min-length 20 \
-    --overlap-threshold 0.5 \
-    --output-dir results
-
-# Run with GFF3 format
-python pipeline_cli.py \
-    --gene-model braker.gff3 \
-    --cds braker.cds.fa \
-    --aa braker.aa \
-    --genome genome.fa \
-    --output-dir results
-```
-
-## New Modular Architecture
-
-### Before vs After
-**Before**: Single 1,255-line `gene_curation_pipeline.py` file
-**After**: Professional modular package with comprehensive testing
-
-```
-gene_curation_pipeline/
-├── __init__.py                   # Main package interface
-├── core/
-│   ├── __init__.py
-│   ├── data_structures.py        # Core data classes with validation
-│   ├── exceptions.py             # Specific exception hierarchy
-│   ├── config.py                 # Centralized configuration
-│   ├── pipeline.py               # Main pipeline orchestration
-│   ├── parsers.py                # GFF3/GTF and FASTA parsing
-│   ├── processors.py             # Annotation, sequence, and selection processing
-│   └── generators.py             # Output file generation
-├── utils/
-│   ├── __init__.py
-│   └── performance_monitor.py    # Enhanced performance monitoring
-├── tests/
-│   ├── __init__.py
-│   ├── test_data_structures.py   # Core structure tests
-│   ├── test_config.py            # Configuration tests
-│   └── test_codon_integration.py # General codon integration tests
-├── pipeline_cli.py               # Command-line interface
-└── run_tests.py                  # Comprehensive test runner
-```
+If `intervaltree` is missing, overlap logic falls back to a slower path.
 
 ## Installation
 
-### Prerequisites
-- Python 3.11+
-- Conda environment with required dependencies
-
-### Required Dependencies
 ```bash
-# Core dependencies (required)
-pip install pyfaidx intervaltree
-
-# Optional dependencies (for enhanced features)
-pip install psutil PyYAML coverage
-```
-
-### Environment Setup
-```bash
-# Load conda environment
-module load miniconda3
-source activate
-conda activate braker_cleaner
+# from repository root
+pip install -r requirements.txt  # if available
+# or install minimal dependencies directly
+pip install pyfaidx intervaltree pyyaml
 ```
 
 ## Input Files
 
-- **Gene Model**: GFF3 or GTF format annotation file (`--gene-model`)
-  - Supports both `.gff3` and `.gtf` extensions
-  - Automatic format detection and preservation
-  - Handles standard and non-standard attribute formats
-- **CDS Sequences**: FASTA file with coding sequences (`--cds`)
-- **AA Sequences**: FASTA file with amino acid sequences (`--aa`)
-- **Genome Sequence**: Reference genome FASTA (`--genome`, **REQUIRED for proper codon integration**)
-  - **CRITICAL**: Required for merging start/stop codons with adjacent features
-  - **CRITICAL**: Required for accurate CDS sequence reconstruction
+Required:
 
-## Output Files
+- `--gene-model`: gene annotation in `GFF3` or `GTF`
+- `--cds`: CDS FASTA (IDs must match transcript IDs)
+- `--aa`: amino acid FASTA (IDs must match transcript IDs)
+- `--genome`: genome FASTA (used for codon-aware sequence reconstruction)
+- `--output-dir`: output directory
 
-- **Format-Preserved Annotations**: 
-  - GTF input → `cleaned.gtf` (GTF format with merged codon coordinates)
-  - GFF3 input → `cleaned.gff3` (GFF3 format with merged codon coordinates)
-- **Reconstructed Sequences**: 
-  - `cleaned.cds.fa` - CDS sequences rebuilt from merged coordinates
-  - `cleaned.aa` - Validated amino acid sequences
-- **Comprehensive Reports**:
-  - `processing_report.txt` - Detailed pipeline statistics and performance metrics
-  - `manual_review_transcripts.txt` - Genes requiring manual attention (typically empty)
-  - `gene_curation.log` - Detailed processing log
+## Basic Usage
 
-## Performance Results
-
-### Actual Test Results (52,860 genes, 91,624 transcripts)
-- ✅ **100% Selection Success**: 52,860/52,860 genes get representatives
-- ✅ **0% Manual Review**: 0 genes requiring manual review
-- ✅ **Fast Processing**: 17.25 seconds total runtime
-- ✅ **Memory Efficient**: 644.5 MB peak memory (15.7% of 4GB limit)
-- ✅ **Complete Codon Integration**: All start/stop codons properly processed
-- ✅ **Accurate Sequence Reconstruction**: CDS sequences rebuilt from merged coordinates
-
-### Phase Performance Breakdown
-```
-Phase                    | Time    | Operations | Ops/sec   | Memory
--------------------------|---------|------------|-----------|--------
-Input Parsing           | 4.99s   | 144,484    | 28,969.4  | 437.4MB
-Annotation Curation     | 0.78s   | 52,860     | 67,767.0  | 494.7MB
-Sequence Validation     | 9.93s   | 91,624     | 9,222.4   | 619.7MB
-Representative Selection| 0.23s   | 52,860     | 225,245.5 | 644.2MB
-Output Generation       | 1.28s   | 4          | 3.1       | 644.5MB
-```
-
-## Configuration Management
-
-### Configuration Options
-The pipeline supports flexible configuration through multiple methods:
-
-#### Default Configuration
-```python
-memory_limit_mb: 4096
-batch_size: 1000
-min_aa_length: 50
-overlap_threshold: 0.5
-enable_codon_integration: True
-enable_sequence_reconstruction: True
-adjacency_gap_threshold: 1
-```
-
-#### File-Based Configuration
-Create `config.json` or `config.yaml`:
-```json
-{
-  "min_aa_length": 20,
-  "overlap_threshold": 0.5,
-  "memory_limit_mb": 2048,
-  "debug_mode": true
-}
-```
-
-#### Environment Variables
-```bash
-export PIPELINE_MIN_AA_LENGTH=20
-export PIPELINE_MEMORY_LIMIT_MB=2048
-export PIPELINE_DEBUG_MODE=true
-```
-
-#### Command Line Usage
 ```bash
 python pipeline_cli.py \
-    --config config.json \
-    --gene-model braker.gtf \
-    --cds braker.codingseq \
-    --aa braker.aa \
-    --genome genome.fa \
-    --output-dir results
+  --gene-model example_data/braker.gff3 \
+  --cds example_data/braker.cds.fa \
+  --aa example_data/braker.aa \
+  --genome /path/to/genome.fa \
+  --output-dir braker_cleaned
 ```
 
-## Command Line Options
+## Key Parameters
 
-- `--gene-model`: Input gene model file - supports GFF3 and GTF formats (required)
-- `--cds`: Input CDS FASTA file (required)
-- `--aa`: Input AA FASTA file (required)
-- `--genome`: Reference genome FASTA file (**REQUIRED for proper codon integration**)
-- `--output-dir`: Output directory (required)
-- `--min-length`: Minimum AA length threshold (default: 50)
-- `--overlap-threshold`: Overlap threshold for spatial conflicts (default: 0.5)
-- `--config`: Configuration file (JSON or YAML format)
-- `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR)
-- `--memory-limit`: Memory limit in MB (default: 4096)
-- `--batch-size`: Batch size for processing (default: 1000)
+- `--min-length INT` (default: `50`)
+  - Minimum amino acid length for valid transcripts.
 
-## Testing Framework
+- `--overlap-threshold FLOAT` (default: `0.5`, allowed range: `0..1`)
+  - `0`: strict non-overlap mode. Output representatives are forced to be non-overlapping across genes.
+  - `>0`: overlap is assessed/flagged by reciprocal overlap threshold.
 
-### Comprehensive Unit Tests (58 tests)
+- `--config PATH`
+  - JSON or YAML config file.
+
+- `--memory-limit INT` (MB)
+- `--batch-size INT`
+- `--log-level {DEBUG,INFO,WARNING,ERROR}`
+
+## Strict Non-Overlap Mode
+
+Use:
+
 ```bash
-# Run all tests
-python run_tests.py
-
-# Run with coverage analysis
-python run_tests.py --coverage
-
-# Run specific test categories
-python run_tests.py --tests TestCodonIntegration TestConfig
-
-# Validate test environment
-python run_tests.py --validate
+--overlap-threshold 0
 ```
 
-### Test Categories
-1. **Data Structure Tests** (25 tests): Core validation and property calculations
-2. **Configuration Tests** (17 tests): File loading, environment variables, validation
-3. **Codon Integration Tests** (16 tests): General codon scenarios and adjacency logic
+Behavior:
 
-### Test Results Summary
-```
-======================================================================
-Gene Curation Pipeline - Test Suite
-======================================================================
-Tests run: 58
-Failures: 0
-Errors: 0
-Skipped: 0
+- The pipeline tries alternative valid transcripts per gene to avoid genomic overlap with already selected representatives.
+- If no valid non-overlapping candidate exists for a gene, that gene is excluded from cleaned output.
+- Excluded genes appear in `manual_review_transcripts.txt`.
 
-✅ All tests passed!
-```
+### Napkin Explanation: Which Gene Is Kept, and Why?
 
-## Error Handling
+Think of strict mode as a greedy placement process:
 
-### Professional Exception Hierarchy
-```python
-PipelineError                 # Base exception
-├── ParseError               # File parsing errors
-├── ValidationError          # Sequence validation errors
-├── SequenceError           # Sequence processing errors
-├── ConfigurationError      # Configuration errors
-├── MemoryError            # Memory usage errors
-└── GenomeError            # Genome access errors
-```
+1. Build a ranked candidate list for each gene (only quality-passing transcripts).
+2. Rank genes globally by their best candidate quality.
+3. Place genes one by one:
+   - If a candidate does not overlap already-kept representatives, keep it.
+   - If it overlaps, try the next candidate from that same gene.
+   - If all candidates overlap, mark that gene as `unresolved_spatial_overlap`.
 
-### Error Context Information
-- Filename and line numbers for parsing errors
-- Coordinate information for sequence errors
-- Configuration parameter details for validation errors
-- Memory usage details for resource errors
+Ranking priority used by the code:
 
-## Examples
+1. Larger AA-hash group size (more redundant support within the gene)
+2. Longer AA length
+3. Longer CDS length
+4. Longer transcript genomic span
+5. Lexicographic ID tie-break (`gene_id`, then `transcript_id`)
 
-### Basic Usage
+Practical consequence:
+
+- If two genes overlap and both have only one valid transcript, one is kept and one is dropped.
+- The kept one is simply the higher-ranked one by the rules above.
+- The dropped one appears in `manual_review_transcripts.txt` with `unresolved_spatial_overlap`.
+
+## Outputs
+
+In `--output-dir`:
+
+- `cleaned.gff3` (or `cleaned.gtf` if input was GTF)
+  - Gene + one representative transcript + exon + CDS features.
+- `cleaned.cds.fa`
+- `cleaned.aa`
+- `manual_review_transcripts.txt`
+  - Genes with no selected representative.
+- `processing_report.txt`
+
+Notes:
+
+- Output annotation does not emit explicit `start_codon` / `stop_codon` features.
+- Sequence files may include quality flags in FASTA headers.
+
+## Quality Flags
+
+`manual_review_transcripts.txt` is driven by transcript `quality_flags`.
+For each gene without a representative, the report contains the union of flags across all transcripts in that gene.
+
+Common flags:
+
+- `short_transcript`: protein length below `--min-length`.
+- `low_quality_no_codons`: both start/stop codon annotations missing.
+- `low_quality_no_start_codon`: AA sequence does not start with `M`.
+- `low_quality_no_stop_codon`: CDS does not end with valid stop codon (`TAA/TAG/TGA`).
+- `internal_stop_codons`: internal `*` detected in AA sequence.
+- `cds_frame_error`: CDS length not divisible by 3.
+- `empty_aa_sequence`: AA sequence is empty.
+- `validated_cds`: CDS passed structural checks.
+- `passed_aa_validation`: AA sequence passed checks.
+- `representative`: transcript selected as representative.
+- `post_selection_overlap`: overlap detected during non-strict overlap assessment (`--overlap-threshold > 0`).
+- `unresolved_spatial_overlap`: transcript could not be placed in strict non-overlap mode (`--overlap-threshold 0`).
+- `created_exon_for_cds`: exon was created to cover CDS.
+- `redundant_start_codon_removed`, `redundant_stop_codon_removed`: codon already covered by existing exon/CDS.
+- `merged_start_codon_with_adjacent`, `merged_stop_codon_with_adjacent`: codon merged into adjacent feature.
+- `created_start_codon_features`, `created_stop_codon_features`: new exon/CDS created for codon.
+- `cds_reconstructed_from_merged_coordinates`: CDS rebuilt from genome using merged coordinates.
+- `cds_reconstruction_failed`: genome-based CDS reconstruction failed.
+
+## Example (Bundled Test Inputs)
+
 ```bash
-# Standard processing with codon integration
 python pipeline_cli.py \
-    --gene-model braker.gtf \
-    --cds braker.codingseq \
-    --aa braker.aa \
-    --genome KaleLate.genome.softmask.fa \
-    --output-dir results
+  --gene-model example_data/braker.gff3 \
+  --cds example_data/braker.cds.fa \
+  --aa example_data/braker.aa \
+  --genome /path/to/genome.fa \
+  --min-length 20 \
+  --overlap-threshold 0 \
+  --output-dir braker_cleaned
 ```
 
-### Production Environment
+`example_data/` does not include a genome FASTA, so `--genome` must point to your own reference genome.
+
+## Quick Validation Commands
+
+Count gene features:
+
 ```bash
-# Full environment setup with custom parameters
-module load miniconda3
-source activate
-conda activate braker_cleaner
-
-python pipeline_cli.py \
-    --gene-model braker.gtf \
-    --cds braker.codingseq \
-    --aa braker.aa \
-    --genome KaleLate.genome.softmask.fa \
-    --min-length 20 \
-    --overlap-threshold 0.5 \
-    --memory-limit 8192 \
-    --log-level INFO \
-    --output-dir production_results
+awk 'BEGIN{FS=OFS="\t"} $3=="gene" {n++} END{print n+0}' cleaned.gff3
 ```
 
-### With Configuration File
+Check strict pairwise overlaps (should be `0` in strict mode):
+
 ```bash
-# Create config.json
-echo '{
-  "min_aa_length": 20,
-  "overlap_threshold": 0.5,
-  "memory_limit_mb": 8192,
-  "debug_mode": false
-}' > config.json
-
-# Run with configuration
-python pipeline_cli.py \
-    --config config.json \
-    --gene-model braker.gtf \
-    --cds braker.codingseq \
-    --aa braker.aa \
-    --genome KaleLate.genome.softmask.fa \
-    --output-dir configured_results
+awk 'BEGIN{FS=OFS="\t"} $3=="gene" {
+  id=""; if(match($9,/ID=[^;]+/)){id=substr($9,RSTART+3,RLENGTH-3)};
+  print $1,$4-1,$5,id,".",$7
+}' cleaned.gff3 \
+| bedtools sort -i - \
+| bedtools intersect -a - -b - -wa -wb \
+| awk 'BEGIN{FS=OFS="\t"}
+  !($1==$7 && $2==$8 && $3==$9 && $4==$10) {
+    a=$1":"$2"-"$3":"$4; b=$7":"$8"-"$9":"$10;
+    if (a<b) c++
+  }
+  END{print c+0}'
 ```
 
-## Implementation Highlights
+## Common Failure Causes
 
-### Enhanced Codon Integration
-1. **Adjacency Detection**: Check ≤1bp gap between codon and existing features
-2. **Coordinate Merging**: Extend existing features to include codon coordinates
-3. **Sequence Reconstruction**: Rebuild CDS from merged coordinates using genome
-4. **Boundary Updates**: Update transcript and gene coordinates after merging
+- Transcript IDs in `--cds` / `--aa` do not match annotation transcript IDs.
+- Missing or unreadable genome FASTA for codon-aware processing.
+- Invalid parameter values (for example overlap threshold outside `0..1`).
 
-### Sequence-First Selection
-1. **Quality Filtering**: Remove transcripts based on sequence quality only
-2. **MD5 Hashing**: Group transcripts by protein sequence identity
-3. **Representative Selection**: Choose longest from most frequent hash group
-4. **Spatial Assessment**: Post-selection overlap detection (non-blocking)
+## Development
 
-### Professional Architecture Benefits
-- **Maintainable**: Clear module separation and single responsibilities
-- **Testable**: Comprehensive unit test coverage with isolated components
-- **Configurable**: Flexible configuration for different environments
-- **Monitorable**: Real-time performance tracking and validation
-- **Extensible**: Easy to add new features and processing phases
+Run tests:
 
-## Performance Monitoring
-
-### Real-Time Monitoring
-- Memory usage tracking with configurable limits
-- Processing time measurement for each phase
-- Operation counting and throughput calculation
-- Algorithmic complexity validation
-
-### Performance Reports
+```bash
+python -m unittest discover -s gene_curation_pipeline/tests -v
 ```
-PERFORMANCE REPORT
-==================================================
-Total time: 17.25 seconds
-Peak memory: 644.5 MB
-Memory limit: 4096 MB
-Memory utilization: 15.7%
-
-Phase breakdown:
-  input_parsing: 4.99s (144484 ops, 28969.4 ops/s, 437.4MB)
-  annotation_curation: 0.78s (52860 ops, 67767.0 ops/s, 494.7MB)
-  sequence_validation: 9.93s (91624 ops, 9222.4 ops/s, 619.7MB)
-  representative_selection: 0.23s (52860 ops, 225245.5 ops/s, 644.2MB)
-  output_generation: 1.28s (4 ops, 3.1 ops/s, 644.5MB)
-```
-
-## Quality Assurance
-
-### Enhanced Quality Flags
-- **Codon Integration**: `created_start_codon_features`, `merged_stop_codon_with_adjacent`
-- **Sequence Validation**: `cds_reconstructed_from_merged_coordinates`, `passed_aa_validation`
-- **Selection Status**: `representative`, `post_selection_overlap`
-- **Boundary Updates**: `gene_boundaries_updated`, `gene_expanded`
-
-### Data Integrity
-- **Original Files Protected**: Never modifies input files
-- **Format Preservation**: Maintains original chromosome names and sources
-- **Coordinate Accuracy**: Proper handling of 1-based vs 0-based indexing
-- **Sequence Consistency**: CDS sequences match merged annotation coordinates
-
-## Troubleshooting
-
-### Common Issues
-1. **Import Errors**: Ensure all dependencies are installed (`pip install pyfaidx intervaltree`)
-2. **Memory Issues**: Reduce batch size or increase memory limit
-3. **Parsing Warnings**: Check for malformed coordinate entries (e.g., start=end)
-4. **Missing Sequences**: Verify transcript ID consistency between files
-5. **Configuration Errors**: Validate configuration file format (JSON/YAML)
-
-### Performance Issues
-- **Slow Processing**: Check memory usage and enable batch processing
-- **High Memory Usage**: Reduce batch size or use streaming processing
-- **Test Failures**: Run `python run_tests.py --validate` to check environment
-
-### File Format Issues
-- **Auto-Detection**: Ensure proper file extensions (.gtf, .gff3)
-- **Attribute Parsing**: Pipeline handles both standard and non-standard formats
-- **Coordinate Systems**: Verify genome and annotation coordinate consistency
-
-## Algorithm Complexity
-
-All algorithms maintain **O(n log n)** or better complexity:
-
-- **File Parsing**: O(n) single-pass processing
-- **Codon Integration**: O(n) adjacency checking per transcript
-- **Hash Grouping**: O(n) using dictionary lookups
-- **Overlap Detection**: O(n log n) using IntervalTree
-- **Sequence Reconstruction**: O(k) per transcript (k = CDS regions)
-
-## Files in This Package
-
-### Core Pipeline Files
-- `pipeline_cli.py`: Command-line interface (maintains original API)
-- `gene_curation_pipeline/`: Modular package directory
-- `run_tests.py`: Comprehensive test runner
-- `CLAUDE.md`: Complete specification document
-
-### Generated Documentation
-- `IMPROVEMENTS_SUMMARY.md`: Detailed summary of all architectural improvements
-- Test coverage reports in `htmlcov/` (when running with `--coverage`)
-
-### Legacy Files
-- `gene_curation_pipeline.py`: Original monolithic implementation (for reference)
-
-## Results Summary
-
-### Test Dataset Performance (KaleLate Dataset)
-- **Total genes**: 52,860
-- **Total transcripts**: 91,624
-- **Representatives selected**: 52,860 (100.0%)
-- **Manual review needed**: 0 (0.0%)
-- **Processing time**: 17.25 seconds
-- **Memory usage**: 644.5 MB peak
-- **Codon integration**: Complete success
-- **Format preservation**: Perfect GTF maintenance
-
-### Quality Achievements
-- ✅ **100% Selection Success**: Every gene gets a representative
-- ✅ **0% Manual Review Rate**: No genes require manual intervention
-- ✅ **Complete Codon Integration**: All start/stop codons properly merged
-- ✅ **Professional Architecture**: 58 comprehensive unit tests with 100% pass rate
-- ✅ **Performance Excellence**: O(n log n) complexity validated
-- ✅ **Memory Efficiency**: <16% memory utilization for large datasets
-- ✅ **Format Integrity**: Perfect preservation of original file formats
-- ✅ **Data Safety**: Original files never modified
-
-## FASTA Header Quality Tags
-
-The pipeline adds quality flags as comments to FASTA headers in both `cleaned.cds.fa` and `cleaned.aa` files. These tags provide detailed information about processing decisions and sequence quality.
-
-### Header Format
-```
->transcript_id # tag1,tag2,tag3
-SEQUENCE_DATA
-```
-
-### Complete Tag Reference Table
-
-| Tag | Category | Description | When Added |
-|-----|----------|-------------|------------|
-| **Preprocessing Tags** | | | |
-| `created_exon_for_cds` | Annotation Curation | New exon created for CDS without exon coverage | When GeneMark.hmm3 produces CDS regions without corresponding exons |
-| `created_start_codon_features` | Codon Integration | Start codon features created and processed | When start codon coordinates are not covered by existing features |
-| `created_stop_codon_features` | Codon Integration | Stop codon features created and processed | When stop codon coordinates are not covered by existing features |
-| **Codon Integration Tags** | | | |
-| `merged_start_codon_with_adjacent` | Codon Integration | Start codon merged with existing exon/CDS | When start codon is adjacent (≤1bp gap) to existing features |
-| `merged_stop_codon_with_adjacent` | Codon Integration | Stop codon merged with existing exon/CDS | When stop codon is adjacent (≤1bp gap) to existing features |
-| `redundant_start_codon_removed` | Codon Integration | Start codon already covered by existing features | When start codon coordinates are within existing exons AND CDS |
-| `redundant_stop_codon_removed` | Codon Integration | Stop codon already covered by existing features | When stop codon coordinates are within existing exons AND CDS |
-| **Sequence Quality Tags** | | | |
-| `cds_reconstructed_from_merged_coordinates` | Sequence Reconstruction | CDS sequence rebuilt from genome using merged coordinates | When genome reference is available and CDS is reconstructed from integrated coordinates |
-| `validated_cds` | Sequence Validation | CDS sequence validated without reconstruction | When genome reference is not available but CDS passes validation |
-| `passed_aa_validation` | Sequence Validation | Amino acid sequence passed all quality checks | When AA sequence has proper start codon, no internal stops, and adequate length |
-| `cds_reconstruction_failed` | Sequence Validation | Failed to reconstruct CDS from genome coordinates | When genome extraction or sequence reconstruction encounters errors |
-| **Quality Issue Tags** | | | |
-| `short_transcript` | Length Validation | Below minimum amino acid length threshold | When AA sequence length < min_aa_length parameter (default: 50) |
-| `empty_aa_sequence` | Sequence Validation | Amino acid sequence is empty or missing | When transcript has no valid AA sequence data |
-| `low_quality_no_start_codon` | Sequence Validation | AA sequence does not start with methionine (M) | When AA sequence lacks proper start codon translation |
-| `low_quality_no_stop_codon` | Sequence Validation | CDS sequence does not end with stop codon | When CDS sequence lacks proper stop codon (TAA/TAG/TGA) |
-| `low_quality_no_codons` | Sequence Validation | No start or stop codon features found | When transcript lacks both start_codon and stop_codon annotations |
-| `internal_stop_codons` | Sequence Validation | Contains internal stop codons (*) within sequence | When AA sequence has stop codons before the terminal position |
-| `cds_frame_error` | Sequence Validation | CDS sequence length not divisible by 3 | When CDS sequence has incorrect reading frame |
-| **Selection Status Tags** | | | |
-| `representative` | Transcript Selection | Selected as gene representative | When transcript is chosen as the best representative for its gene |
-| `post_selection_overlap` | Spatial Analysis | Spatial overlap detected after selection | When representative transcript overlaps with another gene's representative |
-| **Gene Boundary Tags** | | | |
-| `gene_boundaries_updated` | Gene Processing | Gene coordinates adjusted after processing | When gene boundaries change due to codon integration or exon merging |
-| `gene_expanded` | Gene Processing | Gene range increased to include merged features | When integrated codons extend gene boundaries beyond original coordinates |
-| `gene_shrunk` | Gene Processing | Gene range reduced after transcript filtering | When representative selection results in smaller gene boundaries |
-
-### Tag Combinations
-
-Common tag combinations and their meanings:
-
-- `representative,cds_reconstructed_from_merged_coordinates,passed_aa_validation` - High-quality representative with genome-based sequence reconstruction
-- `representative,merged_stop_codon_with_adjacent,passed_aa_validation` - Representative with successfully integrated stop codon
-- `short_transcript` - Transcript excluded from output due to length filtering
-- `internal_stop_codons` - Transcript excluded due to sequence quality issues
-- `low_quality_no_start_codon` - Transcript excluded due to missing start codon (M)
-- `low_quality_no_stop_codon` - Transcript excluded due to missing stop codon (TAA/TAG/TGA)
-- `cds_frame_error` - Transcript excluded due to incorrect reading frame
-- `post_selection_overlap,representative` - Representative transcript with spatial conflicts (non-blocking)
-
-### Quality Control Usage
-
-**For High-Quality Transcripts** (included in output):
-- Must NOT have: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`, `low_quality_no_start_codon`, `low_quality_no_stop_codon`, `cds_frame_error`
-- Should have: `representative`, `passed_aa_validation` or `validated_cds`
-- May have: `cds_reconstructed_from_merged_coordinates` (preferred), codon integration tags
-
-**For Excluded Transcripts** (manual review file):
-- Have any of: `short_transcript`, `low_quality_no_codons`, `internal_stop_codons`, `low_quality_no_start_codon`, `low_quality_no_stop_codon`, `cds_frame_error`
-- Reason: `no_representative_selected`
-
-### Implementation Notes
-
-1. **Tag Order**: Tags are alphabetically sorted in output headers for consistency
-2. **Tag Persistence**: Tags are added throughout processing and persist in final output
-3. **Quality Filtering**: Tags are used for hard filtering - genes with no qualifying transcripts are excluded entirely
-4. **Reconstruction Priority**: `cds_reconstructed_from_merged_coordinates` indicates sequences rebuilt from integrated coordinates (preferred over original BRAKER sequences)
-5. **Stop Codon Handling**: Terminal stop codons (*) are removed from AA sequences but preserved as nucleotides in CDS sequences
-6. **Coordinate Validation**: Single-nucleotide features (start=end) are biologically valid and properly processed - only reversed coordinates (start > end) are rejected
-
-## Citation
-
-If you use this pipeline in your research, please cite:
-
-```
-Gene Annotation Curation Pipeline v2.0
-Professional modular gene annotation curation with complete codon integration,
-comprehensive testing framework, and O(n log n) complexity validation.
-```
-
-## License
-
-This pipeline is provided under the terms specified in the project documentation. For questions about usage, please refer to the comprehensive test suite and performance validation results.

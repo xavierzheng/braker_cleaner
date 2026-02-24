@@ -78,7 +78,7 @@ Examples:
         '--overlap-threshold',
         type=float,
         default=0.5,
-        help='Overlap threshold for spatial conflict detection (default: 0.5)'
+        help='Overlap threshold for spatial conflict detection (default: 0.5). Use 0 for strict non-overlap enforcement.'
     )
     parser.add_argument(
         '--config',
@@ -143,6 +143,9 @@ def main():
             config.memory_limit_mb = args.memory_limit
         if args.batch_size is not None:
             config.batch_size = args.batch_size
+        
+        # Re-validate after CLI overrides.
+        config.validate()
         
         # Create output directory
         output_dir = Path(args.output_dir)

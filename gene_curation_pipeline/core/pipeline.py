@@ -231,6 +231,12 @@ class GeneCurationPipeline:
                     selected = self.selector.select_representative(gene)
                     if selected:
                         selected_count += 1
+
+                # Apply spatial handling across genes after per-gene selection.
+                if self.config.overlap_threshold <= 0:
+                    selected_count = self.selector.enforce_non_overlapping_representatives(self.genes)
+                else:
+                    self.selector.assess_spatial_conflicts(self.genes)
                 
                 metrics.operations_count = len(self.genes)
                 logging.info(f"Selected representatives for {selected_count}/{len(self.genes)} genes")
